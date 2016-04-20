@@ -14,28 +14,47 @@ import requests
 import sys
 import time
 
-from BeautifulSoup import BeautifulSoup as bs
+from bs4 import BeautifulSoup as bs
 
 
 def read_file(filename):
     return [l.strip() for l in open(filename, 'rb').readlines()]
 
+def get_demographics():
+    country = 'EG' #specify country you want top sites from
+    url = 'https://www.quantcast.com/'
+    classes = ['tr-GENDER', 'tr-AGE', 'tr-CHILDREN', 'tr-INCOME', 'tr-EDUCATION', 'tr-ETHNICITY', 'tr-POLITICS']
+    brands = read_file(sys.argv[1])
+    s = requests.Session()
 
-url = 'https://www.quantcast.com/'
-classes = ['tr-GENDER', 'tr-AGE', 'tr-CHILDREN', 'tr-INCOME', 'tr-EDUCATION', 'tr-ETHNICITY', 'tr-POLITICS']
-brands = read_file(sys.argv[1])
-for brand in brands:
-    u = url + brand + '/demographics'
-    data = {}
-    data['brand'] = brand
-    try:
-        soup = bs(requests.get(u).text)
-        for cl in soup.findAll(attrs={'class': 'demographics-composition'}):
-            for tr in cl.findAll('tr'):
-                label = tr.findChild(attrs={'style': 'text-align:left; padding-right:2px; width:108px'}).contents[0].strip()
-                value = tr.findChild(attrs={'class': re.compile(r"index-digit.*")}).contents[0].strip()
-                data[label] = value
-        print json.dumps(data, sort_keys=True)
-        time.sleep(1)  # Be nice and sleep 1 second between calls.
-    except Exception as e:
-        sys.stderr.write('exception %s, skipping\n' % e)
+    #need these cookies to access old quantcast page which we can scrap data from
+    oldQuant = {
+        'viewNewProfile' : '0', 
+        'expires' : 'Fri, 1 Jul 2016 00:00:00 GMT', 
+        'path' : '/'}
+
+    demographics = []
+
+    for brand in brands:
+        u = url + brand + '/demographics' + '?country=' + country
+        data = {}
+        data['brand'] = brand
+        try:
+            soup = bs(s.get(u, cookies=oldQuant).text, 'html.parser')
+            #print(soup.prettify())
+            for cl in soup.findAll(attrs={'class': 'demographics-composition'}):
+                for tr in cl.findAll('tr'):
+                    label = tr.findChild(attrs={'style': 'text-align:left; padding-right:2px; width:108px'}).contents[0].strip()
+                    value = tr.findChild(attrs={'class': re.compile(r"index-digit.*")}).contents[0].strip()
+                    data[label] = value
+            print json.dumps(data, sort_keys=True)
+            demographics.append(json.dumps(data, sort_keys=True))
+            time.sleep(1)  # Be nice and sleep 1 second between calls.
+        except Exception as e:
+            sys.stderr.write('exception %s, skipping\n' % e)
+
+    with open("demographics.txt", "w") as myfile:
+        for demo in demographics:
+            myfile.write(demo + '\n')
+
+get_demographics()
